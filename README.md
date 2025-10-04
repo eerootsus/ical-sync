@@ -64,14 +64,19 @@ Create a `config.json` file:
     "*private*",
     "/^urgent.*/i"
   ],
-  "start_date": "2024-01-01T00:00:00Z",
-  "end_date": "2024-12-31T23:59:59Z",
+  "start_date": "today",
+  "end_date": "+30",
   "replacement_summary": "Busy",
   "google_calendar_id": "your-calendar-id@group.calendar.google.com",
   "google_credentials": "credentials.json",
   "google_token": "token.json"
 }
 ```
+
+**Note**: The `start_date` and `end_date` fields support multiple formats:
+- Relative dates: `"today"`, `"tomorrow"`, `"yesterday"`
+- Day offsets: `"+7"`, `"-30"`
+- Absolute dates: `"2024-01-01"` or `"2024-01-01T00:00:00Z"`
 
 ## Filtering Options
 
@@ -85,12 +90,35 @@ The application supports several types of filter patterns:
 
 ### Timeframe Filtering
 
-Filter events by date range:
+Filter events by date range using flexible date formats:
 
 - **Start date**: `-start "2024-01-01"` - only include events starting from this date
 - **End date**: `-end "2024-12-31"` - only include events up to this date
-- **Date format**: Use `YYYY-MM-DD` format for command-line arguments
-- **Config format**: Use RFC3339 format (`2024-01-01T00:00:00Z`) in JSON config files
+
+#### Date Format Options
+
+The application supports multiple date formats for command-line arguments:
+
+1. **Absolute dates**: `YYYY-MM-DD` format
+   - Example: `-start "2024-01-01" -end "2024-12-31"`
+
+2. **Relative dates**: Named shortcuts
+   - `today` - current date
+   - `tomorrow` - next day
+   - `yesterday` - previous day
+   - Example: `-start today -end tomorrow`
+
+3. **Day offsets**: Relative day counts using `+N` or `-N`
+   - `+N` - N days from reference date
+   - `-N` - N days before reference date
+   - Example: `-start today -end +7` (next 7 days from today)
+   - Example: `-start -30 -end today` (last 30 days)
+
+**Note**: When using relative dates, the end date is calculated relative to the start date if both are specified. For example:
+- `-start today -end +7` = today through 7 days from today
+- `-start 2024-06-01 -end +30` = June 1st through 30 days after June 1st
+
+**Config format**: Configuration files support all the same date formats (RFC3339, YYYY-MM-DD, relative dates, and day offsets)
 
 ### Summary Replacement
 
@@ -137,6 +165,16 @@ ical-sync/
 ### Filter events for a specific month:
 ```bash
 ./ical-sync -input "https://calendar.example.com/cal.ics" -start "2024-06-01" -end "2024-06-30"
+```
+
+### Filter events for the next 7 days:
+```bash
+./ical-sync -input "https://calendar.example.com/cal.ics" -start today -end +7
+```
+
+### Filter events for the last 30 days:
+```bash
+./ical-sync -input "https://calendar.example.com/cal.ics" -start -30 -end today
 ```
 
 ### Filter out meetings in the next quarter:

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"ical-sync/internal/calendar"
 	"ical-sync/internal/config"
+	"ical-sync/internal/dateparse"
 	"ical-sync/internal/filter"
 	"ical-sync/internal/gcal"
 )
@@ -54,19 +54,13 @@ func main() {
 	if *filters != "" {
 		cfg.FilterPatterns = parseFilters(*filters)
 	}
-	if *startDate != "" {
-		start, err := time.Parse("2006-01-02", *startDate)
+	if *startDate != "" || *endDate != "" {
+		start, end, err := dateparse.ParseDateRange(*startDate, *endDate)
 		if err != nil {
-			log.Fatalf("Invalid start date format. Use YYYY-MM-DD: %v", err)
+			log.Fatalf("Failed to parse date range: %v", err)
 		}
-		cfg.StartDate = &start
-	}
-	if *endDate != "" {
-		end, err := time.Parse("2006-01-02", *endDate)
-		if err != nil {
-			log.Fatalf("Invalid end date format. Use YYYY-MM-DD: %v", err)
-		}
-		cfg.EndDate = &end
+		cfg.StartDate = start
+		cfg.EndDate = end
 	}
 	if *replacementSummary != "" {
 		cfg.ReplacementSummary = *replacementSummary
@@ -94,6 +88,17 @@ func main() {
 	}
 
 	fmt.Printf("Found %d events\n", len(events))
+
+	// Log the time range being used for filtering
+	if cfg.StartDate != nil && cfg.EndDate != nil {
+		fmt.Printf("Filtering events from %s to %s", cfg.StartDate.Format("2006-01-02"), cfg.EndDate.Format("2006-01-02"))
+	} else if cfg.StartDate != nil {
+		fmt.Printf("Filtering events from %s onwards", cfg.StartDate.Format("2006-01-02"))
+	} else if cfg.EndDate != nil {
+		fmt.Printf("Filtering events up to %s", cfg.EndDate.Format("2006-01-02"))
+	} else {
+		fmt.Printf("No time range filtering applied")
+	}
 
 	filteredEvents := filter.FilterEvents(events, cfg.FilterPatterns, cfg.StartDate, cfg.EndDate)
 	fmt.Printf("After filtering: %d events\n", len(filteredEvents))
