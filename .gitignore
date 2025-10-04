@@ -1,5 +1,5 @@
 # Built binaries
-ical-sync
+/ical-sync
 
 # iCal files
 *.ics
