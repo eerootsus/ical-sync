@@ -87,6 +87,8 @@ func main() {
 		log.Fatalf("Failed to fetch events: %v", err)
 	}
 
+	calendar.NormalizeTimezones(events)
+
 	fmt.Printf("Found %d events\n", len(events))
 
 	// Log the time range being used for filtering
@@ -102,6 +104,8 @@ func main() {
 
 	filteredEvents := filter.FilterEvents(events, cfg.FilterPatterns, cfg.StartDate, cfg.EndDate)
 	fmt.Printf("After filtering: %d events\n", len(filteredEvents))
+
+	calendar.CleanEventProperties(filteredEvents, cfg.ReplacementSummary)
 
 	// Write to output file if specified
 	if cfg.OutputFile != "" {

@@ -28,19 +28,21 @@ func FetchEvents(url string) ([]*ics.VEvent, error) {
 	return cal.Events(), nil
 }
 
-func CleanEventProperties(event *ics.VEvent, replacementSummary string) {
-	event.RemoveProperty(ics.ComponentPropertyDescription)
-	event.RemoveProperty(ics.ComponentPropertyLocation)
-	event.RemoveProperty(ics.ComponentPropertyClass)
-	event.RemoveProperty(ics.ComponentPropertyPriority)
-	event.RemoveProperty(ics.ComponentPropertySequence)
-	event.RemoveProperty(ics.ComponentPropertyTransp)
-	event.RemoveProperty(ics.ComponentPropertyStatus)
+func CleanEventProperties(events []*ics.VEvent, replacementSummary string) {
+	for _, event := range events {
+		event.RemoveProperty(ics.ComponentPropertyDescription)
+		event.RemoveProperty(ics.ComponentPropertyLocation)
+		event.RemoveProperty(ics.ComponentPropertyClass)
+		event.RemoveProperty(ics.ComponentPropertyPriority)
+		event.RemoveProperty(ics.ComponentPropertySequence)
+		event.RemoveProperty(ics.ComponentPropertyTransp)
+		event.RemoveProperty(ics.ComponentPropertyStatus)
 
-	RemoveXProperties(event)
+		RemoveXProperties(event)
 
-	if replacementSummary != "" {
-		event.SetProperty(ics.ComponentPropertySummary, replacementSummary)
+		if replacementSummary != "" {
+			event.SetProperty(ics.ComponentPropertySummary, replacementSummary)
+		}
 	}
 }
 
@@ -60,15 +62,17 @@ var windowsToIANATimezones = map[string]string{
 }
 
 // NormalizeTimezones converts Windows timezone identifiers to IANA timezone identifiers
-func NormalizeTimezones(event *ics.VEvent) {
-	for i := range event.Properties {
-		prop := &event.Properties[i]
+func NormalizeTimezones(events []*ics.VEvent) {
+	for _, event := range events {
+		for i := range event.Properties {
+			prop := &event.Properties[i]
 
-		// Check if this property has a TZID parameter
-		if tzid, ok := prop.ICalParameters["TZID"]; ok && len(tzid) > 0 {
-			// Check if this is a Windows timezone that needs conversion
-			if ianaTimezone, found := windowsToIANATimezones[tzid[0]]; found {
-				prop.ICalParameters["TZID"] = []string{ianaTimezone}
+			// Check if this property has a TZID parameter
+			if tzid, ok := prop.ICalParameters["TZID"]; ok && len(tzid) > 0 {
+				// Check if this is a Windows timezone that needs conversion
+				if ianaTimezone, found := windowsToIANATimezones[tzid[0]]; found {
+					prop.ICalParameters["TZID"] = []string{ianaTimezone}
+				}
 			}
 		}
 	}
