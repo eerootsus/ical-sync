@@ -57,6 +57,7 @@ func RemoveXProperties(event *ics.VEvent) {
 }
 
 // windowsToIANATimezones maps Windows timezone identifiers to IANA timezone identifiers
+// See https://gist.github.com/alejzeis/ad5827eb14b5c22109ba652a1a267af5 for other possible replacements
 var windowsToIANATimezones = map[string]string{
 	"FLE Standard Time": "Europe/Tallinn",
 }
