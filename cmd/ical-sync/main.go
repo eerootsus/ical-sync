@@ -105,7 +105,7 @@ func main() {
 
 	// Write to output file if specified
 	if cfg.OutputFile != "" {
-		err = calendar.WriteCalendar(cfg.OutputFile, filteredEvents, cfg.ReplacementSummary)
+		err = calendar.WriteCalendar(cfg.OutputFile, filteredEvents)
 		if err != nil {
 			log.Fatalf("Failed to write calendar: %v", err)
 		}

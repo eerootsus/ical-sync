@@ -38,7 +38,6 @@ func CleanEventProperties(event *ics.VEvent, replacementSummary string) {
 	event.RemoveProperty(ics.ComponentPropertyStatus)
 
 	RemoveXProperties(event)
-	NormalizeTimezones(event)
 
 	if replacementSummary != "" {
 		event.SetProperty(ics.ComponentPropertySummary, replacementSummary)
@@ -75,13 +74,12 @@ func NormalizeTimezones(event *ics.VEvent) {
 	}
 }
 
-func WriteCalendar(filename string, events []*ics.VEvent, replacementSummary string) error {
+func WriteCalendar(filename string, events []*ics.VEvent) error {
 	cal := ics.NewCalendar()
 	cal.SetMethod(ics.MethodPublish)
 	cal.SetProductId("-//ical-sync//EN")
 
 	for _, event := range events {
-		CleanEventProperties(event, replacementSummary)
 		cal.AddVEvent(event)
 	}
 
