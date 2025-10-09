@@ -135,12 +135,24 @@ func main() {
 
 		// Write events to Google Calendar
 		fmt.Printf("Writing %d events to Google Calendar...\n", len(filteredEvents))
-		err = gcal.WriteEvents(ctx, service, cfg.GoogleCalendarID, filteredEvents, cfg.ReplacementSummary)
+		result, err := gcal.WriteEvents(ctx, service, cfg.GoogleCalendarID, filteredEvents, cfg.ReplacementSummary)
 		if err != nil {
 			log.Fatalf("Failed to write events to Google Calendar: %v", err)
 		}
 
-		fmt.Printf("Successfully wrote %d events to Google Calendar: %s\n", len(filteredEvents), cfg.GoogleCalendarID)
+		// Report results
+		fmt.Printf("Google Calendar sync complete:\n")
+		fmt.Printf("  Successfully written: %d events\n", result.SuccessCount)
+		if result.SkippedCount > 0 {
+			fmt.Printf("  Skipped (already exist): %d events\n", result.SkippedCount)
+		}
+		if result.FailureCount > 0 {
+			fmt.Printf("  Failed: %d events\n", result.FailureCount)
+			fmt.Printf("\nFailed events:\n")
+			for _, eventErr := range result.Errors {
+				fmt.Printf("  - Event #%d (UID: %s): %v\n", eventErr.EventIndex, eventErr.UID, eventErr.Error)
+			}
+		}
 	}
 
 	if cfg.OutputFile == "" && cfg.GoogleCalendarID == "" {
