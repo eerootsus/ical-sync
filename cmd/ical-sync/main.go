@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"ical-sync/internal/calendar"
 	"ical-sync/internal/config"
@@ -89,17 +90,28 @@ func main() {
 
 	calendar.NormalizeTimezones(events)
 
-	fmt.Printf("Found %d events\n", len(events))
+	// Expand recurring events into individual instances
+	expandStart := time.Now()
+	expandEnd := expandStart.AddDate(0, 0, 30)
+	if cfg.StartDate != nil {
+		expandStart = *cfg.StartDate
+	}
+	if cfg.EndDate != nil {
+		expandEnd = cfg.EndDate.Add(24*time.Hour - time.Nanosecond)
+	}
+	events = calendar.ExpandRecurringEvents(events, expandStart, expandEnd)
+
+	fmt.Printf("Found %d events (after expanding recurring)\n", len(events))
 
 	// Log the time range being used for filtering
 	if cfg.StartDate != nil && cfg.EndDate != nil {
-		fmt.Printf("Filtering events from %s to %s", cfg.StartDate.Format("2006-01-02"), cfg.EndDate.Format("2006-01-02"))
+		fmt.Printf("Filtering events from %s to %s\n", cfg.StartDate.Format("2006-01-02"), cfg.EndDate.Format("2006-01-02"))
 	} else if cfg.StartDate != nil {
-		fmt.Printf("Filtering events from %s onwards", cfg.StartDate.Format("2006-01-02"))
+		fmt.Printf("Filtering events from %s onwards\n", cfg.StartDate.Format("2006-01-02"))
 	} else if cfg.EndDate != nil {
-		fmt.Printf("Filtering events up to %s", cfg.EndDate.Format("2006-01-02"))
+		fmt.Printf("Filtering events up to %s\n", cfg.EndDate.Format("2006-01-02"))
 	} else {
-		fmt.Printf("No time range filtering applied")
+		fmt.Printf("No time range filtering applied\n")
 	}
 
 	filteredEvents := filter.FilterEvents(events, cfg.FilterPatterns, cfg.StartDate, cfg.EndDate)
