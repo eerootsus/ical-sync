@@ -13,9 +13,11 @@ A Go application that pulls events from an iCal calendar, filters them based on 
   - Regular expressions (enclosed in `/`)
 - Filter events by timeframe (start and end dates)
 - Replace event summaries with configurable text
+- Expand recurring events (RRULE) into individual instances within the date window
 - Generate a new iCal calendar with filtered events (excludes location and description)
 - **Write events directly to Google Calendar**
 - Support for both command-line arguments and configuration files
+- **Automated hourly sync via systemd user timer**
 
 ## Installation
 
@@ -139,8 +141,15 @@ ical-sync/
 │   │   └── calendar.go   # iCal parsing and generation
 │   ├── config/
 │   │   └── config.go     # Configuration handling
-│   └── filter/
-│       └── filter.go     # Event filtering logic
+│   ├── dateparse/
+│   │   └── dateparse.go  # Flexible date parsing (relative, offset, absolute)
+│   ├── filter/
+│   │   └── filter.go     # Event filtering logic
+│   └── gcal/
+│       └── gcal.go       # Google Calendar integration
+├── systemd/
+│   ├── ical-sync.service  # systemd service unit (template)
+│   └── ical-sync.timer    # systemd timer unit (template)
 ├── go.mod
 └── README.md
 ```
@@ -251,4 +260,57 @@ ical-sync/
   "filter_patterns": ["meeting", "*personal*"],
   "replacement_summary": "Busy"
 }
+```
+
+## Systemd Timer (Automatic Sync)
+
+Run ical-sync automatically every hour using a systemd user timer.
+
+### Install
+
+1. **Copy config and credentials:**
+
+   ```bash
+   mkdir -p ~/.config/ical-sync
+   cp config.json token.json client_secret_*.json ~/.config/ical-sync/
+   ```
+
+   Edit `~/.config/ical-sync/config.json` to use absolute paths for `google_credentials` and `google_token`:
+
+   ```json
+   "google_credentials": "/home/YOU/.config/ical-sync/credentials.json",
+   "google_token": "/home/YOU/.config/ical-sync/token.json"
+   ```
+
+2. **Build and install the binary:**
+
+   ```bash
+   go build -o ~/.local/bin/ical-sync ./cmd/ical-sync
+   ```
+
+3. **Install systemd units:**
+
+   ```bash
+   mkdir -p ~/.config/systemd/user
+   cp systemd/ical-sync.service systemd/ical-sync.timer ~/.config/systemd/user/
+   ```
+
+4. **Enable and start the timer:**
+
+   ```bash
+   systemctl --user daemon-reload
+   systemctl --user enable --now ical-sync.timer
+   ```
+
+### Verify
+
+```bash
+# Check timer status
+systemctl --user status ical-sync.timer
+
+# Manual test run
+systemctl --user start ical-sync.service
+
+# View logs
+journalctl --user -u ical-sync.service
 ```

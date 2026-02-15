@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync iCal events to Google Calendar
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/ical-sync -config %h/.config/ical-sync/config.json
+
+[Install]
+WantedBy=default.target
