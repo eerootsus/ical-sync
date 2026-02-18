@@ -16,6 +16,8 @@ type Config struct {
 	StartDate          *time.Time `json:"start_date,omitempty"`
 	EndDate            *time.Time `json:"end_date,omitempty"`
 	ReplacementSummary string     `json:"replacement_summary"`
+	OnlyAccepted       bool       `json:"only_accepted,omitempty"`
+	AttendeeEmail      string     `json:"attendee_email,omitempty"`
 
 	// Google Calendar integration
 	GoogleCalendarID  string `json:"google_calendar_id,omitempty"`
@@ -30,6 +32,8 @@ type configJSON struct {
 	StartDate          string   `json:"start_date,omitempty"`
 	EndDate            string   `json:"end_date,omitempty"`
 	ReplacementSummary string   `json:"replacement_summary"`
+	OnlyAccepted       bool     `json:"only_accepted,omitempty"`
+	AttendeeEmail      string   `json:"attendee_email,omitempty"`
 
 	// Google Calendar integration
 	GoogleCalendarID  string `json:"google_calendar_id,omitempty"`
@@ -54,6 +58,8 @@ func LoadFromFile(filename string) (*Config, error) {
 		OutputFile:         configData.OutputFile,
 		FilterPatterns:     configData.FilterPatterns,
 		ReplacementSummary: configData.ReplacementSummary,
+		OnlyAccepted:       configData.OnlyAccepted,
+		AttendeeEmail:      configData.AttendeeEmail,
 		GoogleCalendarID:   configData.GoogleCalendarID,
 		GoogleCredentials:  configData.GoogleCredentials,
 		GoogleToken:        configData.GoogleToken,

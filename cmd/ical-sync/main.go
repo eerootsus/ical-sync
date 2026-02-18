@@ -114,7 +114,7 @@ func main() {
 		fmt.Printf("No time range filtering applied\n")
 	}
 
-	filteredEvents := filter.FilterEvents(events, cfg.FilterPatterns, cfg.StartDate, cfg.EndDate)
+	filteredEvents := filter.FilterEvents(events, cfg.FilterPatterns, cfg.StartDate, cfg.EndDate, cfg.OnlyAccepted, cfg.AttendeeEmail)
 	fmt.Printf("After filtering: %d events\n", len(filteredEvents))
 
 	calendar.CleanEventProperties(filteredEvents, cfg.ReplacementSummary)

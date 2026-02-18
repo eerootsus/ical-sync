@@ -8,16 +8,55 @@ import (
 	ics "github.com/arran4/golang-ical"
 )
 
-func FilterEvents(events []*ics.VEvent, patterns []string, startDate, endDate *time.Time) []*ics.VEvent {
+func FilterEvents(events []*ics.VEvent, patterns []string, startDate, endDate *time.Time, onlyAccepted bool, attendeeEmail string) []*ics.VEvent {
 	var filtered []*ics.VEvent
 
 	for _, event := range events {
-		if shouldIncludeEvent(event, patterns) && isWithinTimeframe(event, startDate, endDate) {
+		if shouldIncludeEvent(event, patterns) && isWithinTimeframe(event, startDate, endDate) && isAccepted(event, onlyAccepted, attendeeEmail) {
 			filtered = append(filtered, event)
 		}
 	}
 
 	return filtered
+}
+
+// isAccepted checks whether the event is accepted by the calendar owner.
+// It checks both standard iCal ATTENDEE PARTSTAT and Microsoft's
+// X-MICROSOFT-CDO-BUSYSTATUS property (used by Outlook published feeds).
+func isAccepted(event *ics.VEvent, onlyAccepted bool, attendeeEmail string) bool {
+	if !onlyAccepted {
+		return true
+	}
+
+	// Check X-MICROSOFT-CDO-BUSYSTATUS (Outlook published feeds use this
+	// instead of ATTENDEE/PARTSTAT)
+	for _, prop := range event.Properties {
+		if prop.IANAToken == "X-MICROSOFT-CDO-BUSYSTATUS" {
+			status := strings.ToUpper(prop.Value)
+			return status == "BUSY" || status == "OOF" || status == "WORKINGELSEWHERE"
+		}
+	}
+
+	// Fall back to standard ATTENDEE PARTSTAT
+	if attendeeEmail == "" {
+		return true
+	}
+
+	email := strings.ToLower(attendeeEmail)
+	for _, prop := range event.Properties {
+		if prop.IANAToken != string(ics.ComponentPropertyAttendee) {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(prop.Value), email) {
+			continue
+		}
+		if partstat, ok := prop.ICalParameters["PARTSTAT"]; ok && len(partstat) > 0 {
+			return strings.EqualFold(partstat[0], "ACCEPTED")
+		}
+		return false
+	}
+
+	return true
 }
 
 func shouldIncludeEvent(event *ics.VEvent, patterns []string) bool {
