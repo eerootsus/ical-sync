@@ -12,6 +12,7 @@
   "replacement_summary": "Busy",
   "only_accepted": true,
   "attendee_email": "you@example.com",
+  "cache_buster": "",
 
   "google_calendar_id": "your-calendar-id@group.calendar.google.com",
   "google_credentials": "credentials.json",

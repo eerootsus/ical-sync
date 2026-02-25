@@ -6,6 +6,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/ical-sync -config %h/.config/ical-sync/config.json
+ExecStopPost=/bin/sh -c 'if [ "$EXIT_STATUS" != "0" ]; then notify-send -u critical "ical-sync" "Calendar sync failed (exit $EXIT_STATUS)"; fi'
 
 [Install]
 WantedBy=default.target

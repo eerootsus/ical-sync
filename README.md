@@ -69,11 +69,16 @@ Create a `config.json` file:
   "start_date": "today",
   "end_date": "+30",
   "replacement_summary": "Busy",
+  "only_accepted": true,
+  "attendee_email": "you@example.com",
+  "cache_buster": "",
   "google_calendar_id": "your-calendar-id@group.calendar.google.com",
   "google_credentials": "credentials.json",
   "google_token": "token.json"
 }
 ```
+
+**Note**: The `cache_buster` field appends a suffix to all event UIDs. Change its value to force re-creation of previously deleted events in Google Calendar.
 
 **Note**: The `start_date` and `end_date` fields support multiple formats:
 - Relative dates: `"today"`, `"tomorrow"`, `"yesterday"`
@@ -146,7 +151,8 @@ ical-sync/
 │   ├── filter/
 │   │   └── filter.go     # Event filtering logic
 │   └── gcal/
-│       └── gcal.go       # Google Calendar integration
+│       ├── auth.go       # Google Calendar OAuth2 authentication
+│       └── writer.go     # Google Calendar event writing
 ├── systemd/
 │   ├── ical-sync.service  # systemd service unit (template)
 │   └── ical-sync.timer    # systemd timer unit (template)
@@ -314,3 +320,5 @@ systemctl --user start ical-sync.service
 # View logs
 journalctl --user -u ical-sync.service
 ```
+
+The service sends a desktop notification (`notify-send`) on failure.

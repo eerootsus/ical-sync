@@ -118,6 +118,7 @@ func main() {
 	fmt.Printf("After filtering: %d events\n", len(filteredEvents))
 
 	calendar.CleanEventProperties(filteredEvents, cfg.ReplacementSummary)
+	calendar.ApplyCacheBuster(filteredEvents, cfg.CacheBuster)
 
 	// Write to output file if specified
 	if cfg.OutputFile != "" {
@@ -164,6 +165,7 @@ func main() {
 			for _, eventErr := range result.Errors {
 				fmt.Printf("  - Event #%d (UID: %s): %v\n", eventErr.EventIndex, eventErr.UID, eventErr.Error)
 			}
+			os.Exit(1)
 		}
 	}
 
