@@ -29,13 +29,12 @@ Go application that fetches iCal events from a URL, filters/transforms them, the
 4. Expand recurring events (RRULE) into individual instances within date window
 5. Filter by: title patterns (text/wildcard/regex), date range, acceptance status
 6. Clean properties (strip description, location, X-properties; apply replacement summary)
-7. Apply cache buster suffix to UIDs (if configured)
-8. Write to iCal file and/or Google Calendar
+7. Write to iCal file and/or sync to Google Calendar (create/update/delete)
 
 **Key design details:**
 - Recurring event expansion generates unique UIDs: `{originalUID}_{occurrenceDatetime}`
-- Google Calendar deduplication relies on `iCalUID` — the `cache_buster` config field appends `_{value}` to all UIDs, forcing re-creation of previously deleted events
-- `eventExists` checks include `ShowDeleted(true)` so deleted gcal events aren't recreated (unless cache buster changes)
+- Google Calendar sync is bidirectional-aware: lists existing gcal events in the time window, creates missing ones, updates changed ones, and deletes events no longer in the source
+- Uses `ShowDeleted(false)` so manually deleted gcal events can be recreated on next sync
 - The `only_accepted` filter checks `X-MICROSOFT-CDO-BUSYSTATUS` first (Outlook feeds), falls back to standard ATTENDEE PARTSTAT
 - End dates in relative config (`"+7"`) are calculated relative to the start date, not today
 

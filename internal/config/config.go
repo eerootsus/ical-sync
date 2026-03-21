@@ -18,7 +18,6 @@ type Config struct {
 	ReplacementSummary string     `json:"replacement_summary"`
 	OnlyAccepted       bool       `json:"only_accepted,omitempty"`
 	AttendeeEmail      string     `json:"attendee_email,omitempty"`
-	CacheBuster        string     `json:"cache_buster,omitempty"`
 
 	// Google Calendar integration
 	GoogleCalendarID  string `json:"google_calendar_id,omitempty"`
@@ -35,7 +34,6 @@ type configJSON struct {
 	ReplacementSummary string   `json:"replacement_summary"`
 	OnlyAccepted       bool     `json:"only_accepted,omitempty"`
 	AttendeeEmail      string   `json:"attendee_email,omitempty"`
-	CacheBuster        string   `json:"cache_buster,omitempty"`
 
 	// Google Calendar integration
 	GoogleCalendarID  string `json:"google_calendar_id,omitempty"`
@@ -62,7 +60,6 @@ func LoadFromFile(filename string) (*Config, error) {
 		ReplacementSummary: configData.ReplacementSummary,
 		OnlyAccepted:       configData.OnlyAccepted,
 		AttendeeEmail:      configData.AttendeeEmail,
-		CacheBuster:        configData.CacheBuster,
 		GoogleCalendarID:   configData.GoogleCalendarID,
 		GoogleCredentials:  configData.GoogleCredentials,
 		GoogleToken:        configData.GoogleToken,

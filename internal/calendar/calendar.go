@@ -296,20 +296,6 @@ func parseICalDateTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unable to parse iCal date-time: %s", s)
 }
 
-// ApplyCacheBuster appends a suffix to the UID of each event, causing
-// downstream systems (Google Calendar, iCal consumers) to treat them as new
-// events even if an earlier version with the original UID was deleted.
-func ApplyCacheBuster(events []*ics.VEvent, cacheBuster string) {
-	if cacheBuster == "" {
-		return
-	}
-	for _, event := range events {
-		if uidProp := event.GetProperty(ics.ComponentPropertyUniqueId); uidProp != nil {
-			event.SetProperty(ics.ComponentPropertyUniqueId,
-				fmt.Sprintf("%s_%s", uidProp.Value, cacheBuster))
-		}
-	}
-}
 
 func WriteCalendar(filename string, events []*ics.VEvent) error {
 	cal := ics.NewCalendar()

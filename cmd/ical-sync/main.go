@@ -118,7 +118,6 @@ func main() {
 	fmt.Printf("After filtering: %d events\n", len(filteredEvents))
 
 	calendar.CleanEventProperties(filteredEvents, cfg.ReplacementSummary)
-	calendar.ApplyCacheBuster(filteredEvents, cfg.CacheBuster)
 
 	// Write to output file if specified
 	if cfg.OutputFile != "" {
@@ -146,21 +145,21 @@ func main() {
 			log.Fatalf("Failed to authenticate with Google Calendar: %v", err)
 		}
 
-		// Write events to Google Calendar
-		fmt.Printf("Writing %d events to Google Calendar...\n", len(filteredEvents))
-		result, err := gcal.WriteEvents(ctx, service, cfg.GoogleCalendarID, filteredEvents, cfg.ReplacementSummary)
+		// Sync events to Google Calendar
+		fmt.Printf("Syncing %d events to Google Calendar...\n", len(filteredEvents))
+		result, err := gcal.SyncEvents(ctx, service, cfg.GoogleCalendarID, filteredEvents, cfg.ReplacementSummary, expandStart, expandEnd)
 		if err != nil {
-			log.Fatalf("Failed to write events to Google Calendar: %v", err)
+			log.Fatalf("Failed to sync events to Google Calendar: %v", err)
 		}
 
 		// Report results
 		fmt.Printf("Google Calendar sync complete:\n")
-		fmt.Printf("  Successfully written: %d events\n", result.SuccessCount)
-		if result.SkippedCount > 0 {
-			fmt.Printf("  Skipped (already exist): %d events\n", result.SkippedCount)
-		}
+		fmt.Printf("  Created: %d\n", result.CreatedCount)
+		fmt.Printf("  Updated: %d\n", result.UpdatedCount)
+		fmt.Printf("  Deleted: %d\n", result.DeletedCount)
+		fmt.Printf("  Unchanged: %d\n", result.UnchangedCount)
 		if result.FailureCount > 0 {
-			fmt.Printf("  Failed: %d events\n", result.FailureCount)
+			fmt.Printf("  Failed: %d\n", result.FailureCount)
 			fmt.Printf("\nFailed events:\n")
 			for _, eventErr := range result.Errors {
 				fmt.Printf("  - Event #%d (UID: %s): %v\n", eventErr.EventIndex, eventErr.UID, eventErr.Error)

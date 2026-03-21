@@ -10,27 +10,47 @@ import (
 	"google.golang.org/api/calendar/v3"
 )
 
-// WriteEventsResult contains the results of writing events to Google Calendar
-type WriteEventsResult struct {
-	SuccessCount int
+// SyncResult contains the results of syncing events to Google Calendar
+type SyncResult struct {
+	CreatedCount int
+	UpdatedCount int
+	DeletedCount int
+	UnchangedCount int
 	FailureCount int
-	SkippedCount int
 	Errors       []EventError
 }
 
-// EventError represents an error that occurred while writing a specific event
+// EventError represents an error that occurred while syncing a specific event
 type EventError struct {
 	EventIndex int
 	UID        string
 	Error      error
 }
 
-// WriteEvents writes iCal events to Google Calendar
-// Returns a result containing success/failure counts and any errors encountered
-func WriteEvents(ctx context.Context, service *calendar.Service, calendarID string, events []*ics.VEvent, replacementSummary string) (*WriteEventsResult, error) {
-	result := &WriteEventsResult{
+// SyncEvents performs a full sync of iCal events to Google Calendar:
+// creates new events, updates changed ones, and deletes events no longer in the source.
+func SyncEvents(ctx context.Context, service *calendar.Service, calendarID string, events []*ics.VEvent, replacementSummary string, timeMin, timeMax time.Time) (*SyncResult, error) {
+	result := &SyncResult{
 		Errors: make([]EventError, 0),
 	}
+
+	// Fetch all existing events from gcal in the time range
+	existing, err := listExistingEvents(ctx, service, calendarID, timeMin, timeMax)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list existing events: %w", err)
+	}
+	log.Printf("Found %d existing events in Google Calendar", len(existing))
+
+	// Build map of iCalUID → gcal event for quick lookup
+	gcalByUID := make(map[string]*calendar.Event, len(existing))
+	for _, e := range existing {
+		if e.ICalUID != "" {
+			gcalByUID[e.ICalUID] = e
+		}
+	}
+
+	// Track which gcal UIDs are still present in source
+	sourceUIDs := make(map[string]bool, len(events))
 
 	for i, event := range events {
 		uid := ""
@@ -38,85 +58,151 @@ func WriteEvents(ctx context.Context, service *calendar.Service, calendarID stri
 			uid = uidProp.Value
 		}
 
-		// Events without UID cannot be deduplicated
 		if uid == "" {
 			result.FailureCount++
 			result.Errors = append(result.Errors, EventError{
 				EventIndex: i + 1,
 				UID:        uid,
-				Error:      fmt.Errorf("event missing UID, cannot write to Google Calendar"),
+				Error:      fmt.Errorf("event missing UID, cannot sync to Google Calendar"),
 			})
 			log.Printf("Failed event %d/%d: missing UID", i+1, len(events))
 			continue
 		}
 
-		// Check if event already exists (debug enabled for first event only)
-		exists, err := eventExists(ctx, service, calendarID, uid)
-		if err != nil {
-			result.FailureCount++
-			result.Errors = append(result.Errors, EventError{
-				EventIndex: i + 1,
-				UID:        uid,
-				Error:      fmt.Errorf("failed to check if event exists: %w", err),
-			})
-			log.Printf("Failed to check event %d/%d (UID: %s): %v", i+1, len(events), uid, err)
-			continue
-		}
+		sourceUIDs[uid] = true
+		desired := convertToGoogleEvent(event, replacementSummary)
 
-		if exists {
-			result.SkippedCount++
-			log.Printf("Skipping event %d/%d (UID: %s) - already exists", i+1, len(events), uid)
-			continue
-		}
-
-		if err := writeEvent(ctx, service, calendarID, event, replacementSummary); err != nil {
-			result.FailureCount++
-			result.Errors = append(result.Errors, EventError{
-				EventIndex: i + 1,
-				UID:        uid,
-				Error:      err,
-			})
-			log.Printf("Failed to create event %d/%d (UID: %s): %v", i+1, len(events), uid, err)
+		if gcalEvent, exists := gcalByUID[uid]; exists {
+			// Event exists — check if it needs updating
+			if eventNeedsUpdate(gcalEvent, desired) {
+				if err := updateEvent(ctx, service, calendarID, gcalEvent.Id, desired); err != nil {
+					result.FailureCount++
+					result.Errors = append(result.Errors, EventError{
+						EventIndex: i + 1,
+						UID:        uid,
+						Error:      err,
+					})
+					log.Printf("Failed to update event %d/%d (UID: %s): %v", i+1, len(events), uid, err)
+				} else {
+					result.UpdatedCount++
+					log.Printf("Updated event %d/%d (UID: %s)", i+1, len(events), uid)
+				}
+			} else {
+				result.UnchangedCount++
+			}
 		} else {
-			result.SuccessCount++
-			log.Printf("Successfully created event %d/%d (UID: %s)", i+1, len(events), uid)
+			// Event doesn't exist — create it
+			if err := createEvent(ctx, service, calendarID, desired); err != nil {
+				result.FailureCount++
+				result.Errors = append(result.Errors, EventError{
+					EventIndex: i + 1,
+					UID:        uid,
+					Error:      err,
+				})
+				log.Printf("Failed to create event %d/%d (UID: %s): %v", i+1, len(events), uid, err)
+			} else {
+				result.CreatedCount++
+				log.Printf("Created event %d/%d (UID: %s)", i+1, len(events), uid)
+			}
+		}
+	}
+
+	// Delete gcal events that are no longer in the source
+	for uid, gcalEvent := range gcalByUID {
+		if sourceUIDs[uid] {
+			continue
+		}
+		if err := service.Events.Delete(calendarID, gcalEvent.Id).Context(ctx).Do(); err != nil {
+			result.FailureCount++
+			result.Errors = append(result.Errors, EventError{
+				UID:   uid,
+				Error: fmt.Errorf("failed to delete event: %w", err),
+			})
+			log.Printf("Failed to delete event (UID: %s): %v", uid, err)
+		} else {
+			result.DeletedCount++
+			log.Printf("Deleted event (UID: %s) — no longer in source", uid)
 		}
 	}
 
 	return result, nil
 }
 
-// eventExists checks if an event with the given icalUID already exists in the calendar
-func eventExists(ctx context.Context, service *calendar.Service, calendarID, icalUID string) (bool, error) {
-	if icalUID == "" {
-		return false, nil
+// listExistingEvents fetches all events from the calendar within the given time range,
+// handling pagination.
+func listExistingEvents(ctx context.Context, service *calendar.Service, calendarID string, timeMin, timeMax time.Time) ([]*calendar.Event, error) {
+	var all []*calendar.Event
+	pageToken := ""
+
+	for {
+		call := service.Events.List(calendarID).
+			TimeMin(timeMin.Format(time.RFC3339)).
+			TimeMax(timeMax.Format(time.RFC3339)).
+			SingleEvents(true).
+			ShowDeleted(false).
+			MaxResults(250).
+			Context(ctx)
+
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			return nil, fmt.Errorf("unable to list events: %w", err)
+		}
+
+		all = append(all, resp.Items...)
+
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
 	}
 
-	events, err := service.Events.List(calendarID).
-		ICalUID(icalUID).
-		ShowDeleted(true).
-		Context(ctx).
-		MaxResults(1).
-		Do()
-
-	if err != nil {
-		return false, fmt.Errorf("unable to query events: %w", err)
-	}
-
-	return len(events.Items) > 0, nil
+	return all, nil
 }
 
-// writeEvent writes a single iCal event to Google Calendar
-func writeEvent(ctx context.Context, service *calendar.Service, calendarID string, event *ics.VEvent, replacementSummary string) error {
-	gcalEvent := convertToGoogleEvent(event, replacementSummary)
+// eventNeedsUpdate checks whether the existing gcal event differs from the desired state.
+func eventNeedsUpdate(existing, desired *calendar.Event) bool {
+	if existing.Summary != desired.Summary {
+		return true
+	}
+	if !eventTimesEqual(existing.Start, desired.Start) {
+		return true
+	}
+	if !eventTimesEqual(existing.End, desired.End) {
+		return true
+	}
+	return false
+}
 
-	createdEvent, err := service.Events.Insert(calendarID, gcalEvent).Context(ctx).Do()
+func eventTimesEqual(a, b *calendar.EventDateTime) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.DateTime == b.DateTime && a.Date == b.Date
+}
+
+// createEvent inserts a new event into Google Calendar.
+func createEvent(ctx context.Context, service *calendar.Service, calendarID string, event *calendar.Event) error {
+	created, err := service.Events.Insert(calendarID, event).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("unable to create event: %w", err)
 	}
+	log.Printf("Created event ID: %s", created.Id)
+	return nil
+}
 
-	log.Printf("Created event ID: %s", createdEvent.Id)
-
+// updateEvent patches an existing Google Calendar event.
+func updateEvent(ctx context.Context, service *calendar.Service, calendarID, eventID string, event *calendar.Event) error {
+	_, err := service.Events.Update(calendarID, eventID, event).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("unable to update event: %w", err)
+	}
 	return nil
 }
 
@@ -151,7 +237,7 @@ func convertToGoogleEvent(event *ics.VEvent, replacementSummary string) *calenda
 		log.Printf("Error getting end time for event: %v", err)
 	}
 
-	// Set UID to avoid duplicates
+	// Set UID
 	if uid := event.GetProperty(ics.ComponentPropertyUniqueId); uid != nil {
 		gcalEvent.ICalUID = uid.Value
 	}
