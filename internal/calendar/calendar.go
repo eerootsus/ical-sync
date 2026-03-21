@@ -209,21 +209,39 @@ func expandRecurringEvent(event *ics.VEvent, rruleStr string, windowStart, windo
 		duration = time.Hour
 	}
 
-	// Build rrule set from DTSTART and RRULE
-	setStr := fmt.Sprintf("DTSTART:%s\nRRULE:%s",
-		eventStart.UTC().Format("20060102T150405Z"),
-		rruleStr)
+	// Build rrule set from DTSTART and RRULE, preserving the original timezone
+	// so that DST transitions are handled correctly by the rrule library.
+	dtStartProp := event.GetProperty(ics.ComponentPropertyDtStart)
+	var dtStartStr string
+	if tzids, ok := dtStartProp.ICalParameters["TZID"]; ok && len(tzids) > 0 {
+		dtStartStr = fmt.Sprintf("DTSTART;TZID=%s:%s", tzids[0], dtStartProp.Value)
+	} else {
+		dtStartStr = fmt.Sprintf("DTSTART:%s", eventStart.UTC().Format("20060102T150405Z"))
+	}
+
+	setStr := fmt.Sprintf("%s\nRRULE:%s", dtStartStr, rruleStr)
 
 	set, err := rrule.StrToRRuleSet(setStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse RRULE %q: %w", rruleStr, err)
 	}
 
-	// Add EXDATE exclusions
+	// Add EXDATE exclusions, parsing with timezone awareness
 	exdateProps := event.GetProperties(ics.ComponentPropertyExdate)
 	for _, prop := range exdateProps {
+		// Get timezone from property parameter if present
+		var loc *time.Location
+		if tzids, ok := prop.ICalParameters["TZID"]; ok && len(tzids) > 0 {
+			loc, _ = time.LoadLocation(tzids[0])
+		}
 		for _, dateStr := range strings.Split(prop.Value, ",") {
 			dateStr = strings.TrimSpace(dateStr)
+			if loc != nil {
+				if t, err := time.ParseInLocation("20060102T150405", dateStr, loc); err == nil {
+					set.ExDate(t)
+					continue
+				}
+			}
 			if t, err := parseICalDateTime(dateStr); err == nil {
 				set.ExDate(t)
 			}
