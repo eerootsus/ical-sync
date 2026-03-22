@@ -107,9 +107,12 @@ func SyncEvents(ctx context.Context, service *calendar.Service, calendarID strin
 		}
 	}
 
-	// Delete gcal events that are no longer in the source
+	// Delete gcal events that are no longer in the source (only if managed by ical-sync)
 	for uid, gcalEvent := range gcalByUID {
 		if sourceUIDs[uid] {
+			continue
+		}
+		if !isManagedEvent(gcalEvent) {
 			continue
 		}
 		if err := service.Events.Delete(calendarID, gcalEvent.Id).Context(ctx).Do(); err != nil {
@@ -206,9 +209,27 @@ func updateEvent(ctx context.Context, service *calendar.Service, calendarID, eve
 	return nil
 }
 
+// managedPropertyKey is the extended property key used to mark events managed by ical-sync.
+// Only events with this property will be updated or deleted during sync.
+const managedPropertyKey = "ical-sync-managed"
+
+// isManagedEvent returns true if the event was created/updated by ical-sync.
+func isManagedEvent(event *calendar.Event) bool {
+	if event.ExtendedProperties == nil {
+		return false
+	}
+	return event.ExtendedProperties.Shared[managedPropertyKey] == "true"
+}
+
 // convertToGoogleEvent converts an iCal VEvent to a Google Calendar Event
 func convertToGoogleEvent(event *ics.VEvent, replacementSummary string) *calendar.Event {
-	gcalEvent := &calendar.Event{}
+	gcalEvent := &calendar.Event{
+		ExtendedProperties: &calendar.EventExtendedProperties{
+			Shared: map[string]string{
+				managedPropertyKey: "true",
+			},
+		},
+	}
 
 	// Set summary
 	if replacementSummary != "" {
