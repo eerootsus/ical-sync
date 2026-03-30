@@ -2,12 +2,16 @@ package gcal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"time"
 
 	ics "github.com/arran4/golang-ical"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
 )
 
 // SyncResult contains the results of syncing events to Google Calendar
@@ -91,15 +95,41 @@ func SyncEvents(ctx context.Context, service *calendar.Service, calendarID strin
 				result.UnchangedCount++
 			}
 		} else {
-			// Event doesn't exist — create it
+			// Event doesn't exist in our time-range query — try to create it
 			if err := createEvent(ctx, service, calendarID, desired); err != nil {
-				result.FailureCount++
-				result.Errors = append(result.Errors, EventError{
-					EventIndex: i + 1,
-					UID:        uid,
-					Error:      err,
-				})
-				log.Printf("Failed to create event %d/%d (UID: %s): %v", i+1, len(events), uid, err)
+				// Handle 409 duplicate: event exists outside our query window
+				if isDuplicateError(err) {
+					if gcalEvent, lookupErr := findEventByUID(ctx, service, calendarID, uid); lookupErr == nil && gcalEvent != nil {
+						if updateErr := updateEvent(ctx, service, calendarID, gcalEvent.Id, desired); updateErr != nil {
+							result.FailureCount++
+							result.Errors = append(result.Errors, EventError{
+								EventIndex: i + 1,
+								UID:        uid,
+								Error:      updateErr,
+							})
+							log.Printf("Failed to update duplicate event %d/%d (UID: %s): %v", i+1, len(events), uid, updateErr)
+						} else {
+							result.UpdatedCount++
+							log.Printf("Updated duplicate event %d/%d (UID: %s)", i+1, len(events), uid)
+						}
+					} else {
+						result.FailureCount++
+						result.Errors = append(result.Errors, EventError{
+							EventIndex: i + 1,
+							UID:        uid,
+							Error:      err,
+						})
+						log.Printf("Failed to create event %d/%d (UID: %s): %v (and lookup failed)", i+1, len(events), uid, err)
+					}
+				} else {
+					result.FailureCount++
+					result.Errors = append(result.Errors, EventError{
+						EventIndex: i + 1,
+						UID:        uid,
+						Error:      err,
+					})
+					log.Printf("Failed to create event %d/%d (UID: %s): %v", i+1, len(events), uid, err)
+				}
 			} else {
 				result.CreatedCount++
 				log.Printf("Created event %d/%d (UID: %s)", i+1, len(events), uid)
@@ -207,6 +237,47 @@ func updateEvent(ctx context.Context, service *calendar.Service, calendarID, eve
 		return fmt.Errorf("unable to update event: %w", err)
 	}
 	return nil
+}
+
+// isDuplicateError checks if the error is a Google API 409 Conflict (duplicate).
+func isDuplicateError(err error) bool {
+	var apiErr *googleapi.Error
+	if ok := errors.As(err, &apiErr); ok {
+		return apiErr.Code == http.StatusConflict
+	}
+	// Also check wrapped errors
+	return false
+}
+
+// findEventByUID looks up a single event by its iCalUID across the entire calendar.
+// It also checks deleted events since a cancelled event still reserves the UID.
+// For expanded recurring instance UIDs (containing _YYYYMMDD), it also tries the base UID.
+func findEventByUID(ctx context.Context, service *calendar.Service, calendarID, uid string) (*calendar.Event, error) {
+	uidsToTry := []string{uid}
+	// If this is an expanded recurring instance UID, also try the base UID
+	if idx := strings.LastIndex(uid, "_"); idx > 0 {
+		baseUID := uid[:idx]
+		uidsToTry = append(uidsToTry, baseUID)
+	}
+
+	for _, tryUID := range uidsToTry {
+		for _, showDeleted := range []bool{false, true} {
+			resp, err := service.Events.List(calendarID).
+				ICalUID(tryUID).
+				ShowDeleted(showDeleted).
+				MaxResults(1).
+				Context(ctx).
+				Do()
+			if err != nil {
+				continue
+			}
+			if len(resp.Items) > 0 {
+				return resp.Items[0], nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("event not found by UID %s", uid)
 }
 
 // managedPropertyKey is the extended property key used to mark events managed by ical-sync.
