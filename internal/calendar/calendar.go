@@ -63,6 +63,7 @@ func RemoveXProperties(event *ics.VEvent) {
 // See https://gist.github.com/alejzeis/ad5827eb14b5c22109ba652a1a267af5 for other possible replacements
 var windowsToIANATimezones = map[string]string{
 	"FLE Standard Time":       "Europe/Tallinn",
+	"GMT Standard Time":       "Europe/London",
 	"Greenwich Standard Time": "Europe/London",
 }
 
