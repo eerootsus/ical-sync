@@ -217,7 +217,18 @@ func eventTimesEqual(a, b *calendar.EventDateTime) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.DateTime == b.DateTime && a.Date == b.Date
+	if a.Date != b.Date {
+		return false
+	}
+	if a.DateTime == b.DateTime {
+		return true
+	}
+	ta, errA := time.Parse(time.RFC3339, a.DateTime)
+	tb, errB := time.Parse(time.RFC3339, b.DateTime)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return ta.Equal(tb)
 }
 
 // createEvent inserts a new event into Google Calendar.
